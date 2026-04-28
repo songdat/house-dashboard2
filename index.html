@@ -7,7 +7,7 @@
 <!-- MQTT -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-<!-- ✅ Supabase v2 -->
+<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
@@ -80,62 +80,88 @@ td, th {
 <script>
 
 // =====================
-// ✅ SUPABASE (FIXED)
+// SUPABASE SAFE INIT
 // =====================
-const { createClient } = supabase;
+let supabaseClient = null;
 
-const supabaseClient = createClient(
-  "https://pjatqfixvxbxcbzmuabn.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqYXRxZml4dnhieGNiem11YWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODY3NjIsImV4cCI6MjA5Mjc2Mjc2Mn0.wHVKGktNuVQUsyr-ufbnO5f9U7pUA4nN0x8RttLse18"
-);
+try {
+    const { createClient } = supabase;
+
+    supabaseClient = createClient(
+        "https://pjatqfixvxbxcbzmuabn.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqYXRxZml4dnhieGNiem11YWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODY3NjIsImV4cCI6MjA5Mjc2Mjc2Mn0.wHVKGktNuVQUsyr-ufbnO5f9U7pUA4nN0x8RttLse18"
+    );
+
+} catch (e) {
+    console.log("Supabase load error:", e);
+}
 
 // =====================
-// ✅ MQTT (FIXED)
+// MQTT (ใช้ broker ที่เสถียร)
 // =====================
+const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
+    connectTimeout: 4000,
+    reconnectPeriod: 1000
+});
 
-const client = mqtt.connect("wss://test.mosquitto.org:8081");
-    
-    
 let lastState = { l1:null, l2:null, l3:null, l4:null };
 
 // =====================
-// CONNECT
+// MQTT CONNECT
 // =====================
 client.on("connect", () => {
     console.log("MQTT CONNECTED");
-    document.getElementById("status").innerText = "✅ Connected";
+    document.getElementById("status").innerText = "✅ Connected (Realtime)";
     client.subscribe("home/light/yourname123");
 });
 
-// 🔍 DEBUG
+// debug
 client.on("error", err => console.log("MQTT ERROR:", err));
-client.on("offline", () => console.log("MQTT OFFLINE"));
+client.on("offline", () => {
+    console.log("MQTT OFFLINE");
+    document.getElementById("status").innerText = "⚠️ Offline (no realtime)";
+});
 client.on("reconnect", () => console.log("MQTT RECONNECTING..."));
 
 // =====================
-// RECEIVE
+// RECEIVE DATA
 // =====================
 client.on("message", (topic, message) => {
 
-    console.log("MQTT DATA:", message.toString());
+    console.log("MQTT:", message.toString());
 
-    let data = JSON.parse(message.toString());
+    let data;
 
-    checkChange("l1", data.l1);
-    checkChange("l2", data.l2);
-    checkChange("l3", data.l3);
-    checkChange("l4", data.l4);
+    try {
+        data = JSON.parse(message.toString());
+    } catch {
+        console.log("JSON error");
+        return;
+    }
 
-    update("l1", data.l1);
-    update("l2", data.l2);
-    update("l3", data.l3);
-    update("l4", data.l4);
+    updateAll(data);
 });
+
+// =====================
+// UPDATE ALL
+// =====================
+function updateAll(data){
+
+    ["l1","l2","l3","l4"].forEach(key => {
+
+        let value = data[key];
+
+        if(value === undefined) return;
+
+        checkChange(key, value);
+        updateUI(key, value);
+    });
+}
 
 // =====================
 // UPDATE UI
 // =====================
-function update(id, state){
+function updateUI(id, state){
     document.getElementById(id).src =
         (state == 1) ? "light_on.png" : "light_off.png";
 }
@@ -187,6 +213,8 @@ function addLog(light, status, time){
 // =====================
 async function saveToSupabase(light, status, time){
 
+    if(!supabaseClient) return;
+
     const { error } = await supabaseClient
         .from("light_logs")
         .insert([{ light, status, time }]);
@@ -200,6 +228,8 @@ async function saveToSupabase(light, status, time){
 // LOAD HISTORY
 // =====================
 async function loadHistory(){
+
+    if(!supabaseClient) return;
 
     const { data } = await supabaseClient
         .from("light_logs")
