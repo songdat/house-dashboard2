@@ -80,83 +80,44 @@ td, th {
 <script>
 
 // =====================
-// SUPABASE SAFE INIT
+// SUPABASE
 // =====================
-let supabaseClient = null;
+const { createClient } = supabase;
 
-try {
-    const { createClient } = supabase;
-
-    supabaseClient = createClient(
-        "https://pjatqfixvxbxcbzmuabn.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqYXRxZml4dnhieGNiem11YWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODY3NjIsImV4cCI6MjA5Mjc2Mjc2Mn0.wHVKGktNuVQUsyr-ufbnO5f9U7pUA4nN0x8RttLse18"
-    );
-
-} catch (e) {
-    console.log("Supabase load error:", e);
-}
+const supabaseClient = createClient(
+  "https://pjatqfixvxbxcbzmuabn.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqYXRxZml4dnhieGNiem11YWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODY3NjIsImV4cCI6MjA5Mjc2Mjc2Mn0.wHVKGktNuVQUsyr-ufbnO5f9U7pUA4nN0x8RttLse18"
+);
 
 // =====================
-// MQTT (ใช้ broker ที่เสถียร)
+// MQTT
 // =====================
-const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
-    connectTimeout: 4000,
-    reconnectPeriod: 1000
-});
+const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
 
 let lastState = { l1:null, l2:null, l3:null, l4:null };
 
 // =====================
-// MQTT CONNECT
+// CONNECT
 // =====================
 client.on("connect", () => {
-    console.log("MQTT CONNECTED");
-    document.getElementById("status").innerText = "✅ Connected (Realtime)";
+    document.getElementById("status").innerText = "✅ Connected";
     client.subscribe("home/light/yourname123");
 });
 
-// debug
-client.on("error", err => console.log("MQTT ERROR:", err));
-client.on("offline", () => {
-    console.log("MQTT OFFLINE");
-    document.getElementById("status").innerText = "⚠️ Offline (no realtime)";
-});
-client.on("reconnect", () => console.log("MQTT RECONNECTING..."));
-
 // =====================
-// RECEIVE DATA
+// RECEIVE
 // =====================
 client.on("message", (topic, message) => {
 
-    console.log("MQTT:", message.toString());
-
-    let data;
-
-    try {
-        data = JSON.parse(message.toString());
-    } catch {
-        console.log("JSON error");
-        return;
-    }
-
-    updateAll(data);
-});
-
-// =====================
-// UPDATE ALL
-// =====================
-function updateAll(data){
+    let data = JSON.parse(message.toString());
 
     ["l1","l2","l3","l4"].forEach(key => {
-
-        let value = data[key];
-
-        if(value === undefined) return;
-
-        checkChange(key, value);
-        updateUI(key, value);
+        if(data[key] !== undefined){
+            checkChange(key, data[key]);
+            updateUI(key, data[key]);
+        }
     });
-}
+});
 
 // =====================
 // UPDATE UI
@@ -180,9 +141,9 @@ function checkChange(name, value){
 
         let status = value == 1 ? "opened" : "closed";
         let timeISO = new Date().toISOString();
-        let timeText = formatTime(timeISO);
 
-        addLog(name, status, timeText);
+        // ✅ ใช้ ISO ตรง ๆ (สำคัญมาก)
+        addLog(name, status, timeISO);
         saveToSupabase(name, status, timeISO);
 
         lastState[name] = value;
@@ -190,18 +151,14 @@ function checkChange(name, value){
 }
 
 // =====================
-// FORMAT TIME
+// FORMAT TIME (FIXED)
 // =====================
 function formatTime(iso){
 
-    // แปลง ISO → milliseconds
     const utc = new Date(iso).getTime();
-
-    // บวก +7 ชั่วโมง (ประเทศไทย)
     const thaiTime = new Date(utc + (7 * 60 * 60 * 1000));
 
-    // แยกค่า
-    const year = thaiTime.getFullYear() + 543; // พ.ศ.
+    const year = thaiTime.getFullYear() + 543;
     const month = String(thaiTime.getMonth()+1).padStart(2,'0');
     const day = String(thaiTime.getDate()).padStart(2,'0');
     const hour = String(thaiTime.getHours()).padStart(2,'0');
@@ -211,21 +168,21 @@ function formatTime(iso){
 }
 
 // =====================
-// ADD TABLE
+// ADD TABLE (FORMAT ตรงนี้เท่านั้น)
 // =====================
-function addLog(light, status, time){
+function addLog(light, status, isoTime){
+
     let row = document.getElementById("logTable").insertRow(1);
+
     row.insertCell(0).innerText = light;
     row.insertCell(1).innerText = status;
-    row.insertCell(2).innerText = time;
+    row.insertCell(2).innerText = formatTime(isoTime);
 }
 
 // =====================
-// SAVE SUPABASE
+// SAVE TO SUPABASE
 // =====================
 async function saveToSupabase(light, status, time){
-
-    if(!supabaseClient) return;
 
     const { error } = await supabaseClient
         .from("light_logs")
@@ -241,8 +198,6 @@ async function saveToSupabase(light, status, time){
 // =====================
 async function loadHistory(){
 
-    if(!supabaseClient) return;
-
     const { data } = await supabaseClient
         .from("light_logs")
         .select("*")
@@ -251,7 +206,7 @@ async function loadHistory(){
 
     if(data){
         data.forEach(row => {
-            addLog(row.light, row.status, formatTime(row.time));
+            addLog(row.light, row.status, row.time); // ✅ ส่ง ISO ตรง
         });
     }
 }
