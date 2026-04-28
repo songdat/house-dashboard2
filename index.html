@@ -4,8 +4,11 @@
 <meta charset="UTF-8">
 <title>Smart Home Dashboard</title>
 
+<!-- MQTT -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<!-- ✅ Supabase v2 -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
 body {
@@ -30,7 +33,6 @@ body {
     width: 60px;
 }
 
-/* ปรับตำแหน่งตามรูป */
 #l1 { top: 100px; left: 120px; }
 #l2 { top: 100px; left: 500px; }
 #l3 { top: 300px; left: 150px; }
@@ -77,25 +79,43 @@ td, th {
 
 <script>
 
-// ===== Supabase =====
-const supabase = window.supabase.createClient(
-    "https://pjatqfixvxbxcbzmuabn.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqYXRxZml4dnhieGNiem11YWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODY3NjIsImV4cCI6MjA5Mjc2Mjc2Mn0.wHVKGktNuVQUsyr-ufbnO5f9U7pUA4nN0x8RttLse18"
+// =====================
+// ✅ SUPABASE (FIXED)
+// =====================
+const { createClient } = supabase;
+
+const supabaseClient = createClient(
+  "https://pjatqfixvxbxcbzmuabn.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqYXRxZml4dnhieGNiem11YWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODY3NjIsImV4cCI6MjA5Mjc2Mjc2Mn0.wHVKGktNuVQUsyr-ufbnO5f9U7pUA4nN0x8RttLse18"
 );
 
-// ===== MQTT =====
-const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
+// =====================
+// ✅ MQTT (FIXED)
+// =====================
+const client = mqtt.connect("wss://broker.hivemq.com/mqtt"); // ✔️ ใช้แบบนี้เสถียรสุด
 
 let lastState = { l1:null, l2:null, l3:null, l4:null };
 
-// ===== CONNECT =====
+// =====================
+// CONNECT
+// =====================
 client.on("connect", () => {
+    console.log("MQTT CONNECTED");
     document.getElementById("status").innerText = "✅ Connected";
     client.subscribe("home/light/yourname123");
 });
 
-// ===== RECEIVE DATA =====
+// 🔍 DEBUG
+client.on("error", err => console.log("MQTT ERROR:", err));
+client.on("offline", () => console.log("MQTT OFFLINE"));
+client.on("reconnect", () => console.log("MQTT RECONNECTING..."));
+
+// =====================
+// RECEIVE
+// =====================
 client.on("message", (topic, message) => {
+
+    console.log("MQTT DATA:", message.toString());
 
     let data = JSON.parse(message.toString());
 
@@ -110,13 +130,17 @@ client.on("message", (topic, message) => {
     update("l4", data.l4);
 });
 
-// ===== UPDATE UI =====
+// =====================
+// UPDATE UI
+// =====================
 function update(id, state){
-    let el = document.getElementById(id);
-    el.src = (state == 1) ? "light_on.png" : "light_off.png";
+    document.getElementById(id).src =
+        (state == 1) ? "light_on.png" : "light_off.png";
 }
 
-// ===== CHECK CHANGE =====
+// =====================
+// CHECK CHANGE
+// =====================
 function checkChange(name, value){
 
     if(lastState[name] === null){
@@ -137,27 +161,31 @@ function checkChange(name, value){
     }
 }
 
-// ===== FORMAT TIME =====
+// =====================
+// FORMAT TIME
+// =====================
 function formatTime(iso){
     let d = new Date(iso);
-    let h = String(d.getHours()).padStart(2,'0');
-    let m = String(d.getMinutes()).padStart(2,'0');
-    return h + ":" + m;
+    return d.getHours().toString().padStart(2,'0') + ":" +
+           d.getMinutes().toString().padStart(2,'0');
 }
 
-// ===== ADD TO TABLE =====
+// =====================
+// ADD TABLE
+// =====================
 function addLog(light, status, time){
-    let table = document.getElementById("logTable");
-    let row = table.insertRow(1);
-
+    let row = document.getElementById("logTable").insertRow(1);
     row.insertCell(0).innerText = light;
     row.insertCell(1).innerText = status;
     row.insertCell(2).innerText = time;
 }
 
-// ===== SAVE TO SUPABASE =====
+// =====================
+// SAVE SUPABASE
+// =====================
 async function saveToSupabase(light, status, time){
-    const { error } = await supabase
+
+    const { error } = await supabaseClient
         .from("light_logs")
         .insert([{ light, status, time }]);
 
@@ -166,10 +194,12 @@ async function saveToSupabase(light, status, time){
     }
 }
 
-// ===== LOAD HISTORY =====
+// =====================
+// LOAD HISTORY
+// =====================
 async function loadHistory(){
 
-    const { data, error } = await supabase
+    const { data } = await supabaseClient
         .from("light_logs")
         .select("*")
         .order("time", { ascending: false })
