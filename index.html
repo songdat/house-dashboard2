@@ -195,8 +195,6 @@ function checkChange(name, value){
 function formatTime(iso){
     let d = new Date(iso);
 
-    d = new Date(d.getTime() + (7 * 60 * 60 * 1000));
-
     return d.toLocaleString("th-TH", {
         day: "2-digit",
         month: "2-digit",
