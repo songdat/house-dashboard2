@@ -54,7 +54,7 @@ td, th {
 
 <body>
 
-<h2 style="color:white;">🏠 Smart Home Dashboard</h2>
+<h2 style="color:white;">🏠 ระบบการจัดการ การใช้งานสิ่งต่างๆภายในบ้าน</h2>
 
 <div class="house">
     <img src="BG.png" class="bg">
@@ -69,13 +69,13 @@ td, th {
 
 <table id="logTable">
 <tr>
-<th>Light</th>
-<th>Status</th>
-<th>Time</th>
+<th>รายการอุปกรณ์เครื่องใช้</th>
+<th>สถานะการใช้งาน</th>
+<th>ช่วงเวลา</th>
 </tr>
 </table>
 
-<p id="status" style="color:white;">Connecting...</p>
+<p id="status" style="color:white;">กำลังเชื่อมต่อ...</p>
 
 <script>
 
@@ -100,7 +100,7 @@ let lastState = { l1:null, l2:null, l3:null, l4:null };
 // CONNECT
 // =====================
 client.on("connect", () => {
-    document.getElementById("status").innerText = "✅ Connected";
+    document.getElementById("สถานะการเชื่อมต่อ").innerText = "✅ เชื่อมต่อเรียบร้อย";
     client.subscribe("home/light/yourname123");
 });
 
@@ -139,7 +139,7 @@ function checkChange(name, value){
 
     if(lastState[name] !== value){
 
-        let status = value == 1 ? "opened" : "closed";
+        let status = value == 1 ? "ถูกเปิดใช้งาน" : "ปิดการใช้งานแล้ว";
         let timeISO = new Date().toISOString();
 
         // ✅ ใช้ ISO ตรง ๆ (สำคัญมาก)
