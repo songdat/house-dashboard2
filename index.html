@@ -92,8 +92,9 @@ const supabaseClient = createClient(
 // =====================
 // ✅ MQTT (FIXED)
 // =====================
-//const client = mqtt.connect("wss://broker.hivemq.com/mqtt"); // ✔️ ใช้แบบนี้เสถียรสุด
+
 const client = mqtt.connect("wss://test.mosquitto.org:8081");
+
 let lastState = { l1:null, l2:null, l3:null, l4:null };
 
 // =====================
