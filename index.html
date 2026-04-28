@@ -65,7 +65,7 @@ td, th {
     <img id="l4" class="light" src="light_off.png">
 </div>
 
-<h3 style="color:white;">📊 History</h3>
+<h3 style="color:white;">📊 ประวัติการใช้งาน</h3>
 
 <table id="logTable">
 <tr>
@@ -100,7 +100,7 @@ let lastState = { l1:null, l2:null, l3:null, l4:null };
 // CONNECT
 // =====================
 client.on("connect", () => {
-    document.getElementById("สถานะการเชื่อมต่อ").innerText = "✅ เชื่อมต่อเรียบร้อย";
+    document.getElementById("status").innerText = "✅ เชื่อมต่อเรียบร้อยแล้ว";
     client.subscribe("home/light/yourname123");
 });
 
