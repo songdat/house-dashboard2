@@ -10,18 +10,34 @@
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
 body {
     margin:0;
     background:#222;
-    text-align:center;
     font-family: Arial;
+    text-align:center;
 }
 
+h2 {
+    color:white;
+}
+
+.container {
+    display:flex;
+    justify-content:center;
+    gap:20px;
+    flex-wrap:wrap;
+    padding:10px;
+}
+
+/* HOUSE */
 .house {
     position: relative;
     width: 800px;
-    margin: auto;
+    margin:auto;
 }
 
 .house img.bg {
@@ -38,23 +54,35 @@ body {
 #l3 { top: 300px; left: 150px; }
 #l4 { top: 300px; left: 520px; }
 
+/* TABLE */
 table {
-    margin:auto;
     color:white;
-    margin-top:20px;
     border-collapse: collapse;
+    width:420px;
 }
 
 td, th {
-    padding:8px;
     border:1px solid white;
+    padding:6px;
+    font-size:12px;
+}
+
+/* RIGHT PANEL */
+.panel {
+    background:white;
+    padding:15px;
+    border-radius:10px;
+}
+
+#status {
+    color:white;
 }
 </style>
 </head>
 
 <body>
 
-<h2 style="color:white;">🏠 ระบบการจัดการ การใช้งานสิ่งต่างๆภายในบ้าน</h2>
+<h2>🏠 Smart Home Dashboard</h2>
 
 <div class="house">
     <img src="BG.png" class="bg">
@@ -65,19 +93,42 @@ td, th {
     <img id="l4" class="light" src="light_off.png">
 </div>
 
-<h3 style="color:white;">📊 ประวัติการใช้งาน</h3>
+<p id="status">Connecting...</p>
 
-<table id="logTable">
-<tr>
-<th>รายการอุปกรณ์เครื่องใช้</th>
-<th>สถานะการใช้งาน</th>
-<th>ช่วงเวลา</th>
-</tr>
-</table>
+<div class="container">
 
-<p id="status" style="color:white;">กำลังเชื่อมต่อ...</p>
+    <!-- LEFT: TABLE -->
+    <div>
+        <h3 style="color:white;">📊 ประวัติการใช้งาน</h3>
+
+        <table id="logTable">
+            <tr>
+                <th>อุปกรณ์</th>
+                <th>สถานะ</th>
+                <th>เวลา</th>
+            </tr>
+        </table>
+    </div>
+
+    <!-- RIGHT: CHART -->
+    <div class="panel">
+        <h3>📈 วิเคราะห์การใช้งาน 24 ชั่วโมง</h3>
+        <canvas id="usageChart" width="400" height="300"></canvas>
+    </div>
+
+</div>
 
 <script>
+
+// =====================
+// DEVICE NAME (THAI)
+// =====================
+const deviceName = {
+    l1: "หลอดไฟห้องน้ำ",
+    l2: "หลอดไฟห้องนอน",
+    l3: "หลอดไฟห้องทำงาน",
+    l4: "หลอดไฟห้องครัว"
+};
 
 // =====================
 // SUPABASE
@@ -96,16 +147,20 @@ const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
 
 let lastState = { l1:null, l2:null, l3:null, l4:null };
 
+// 24-hour analysis
+let hourCount = Array(24).fill(0);
+let chart;
+
 // =====================
 // CONNECT
 // =====================
 client.on("connect", () => {
-    document.getElementById("status").innerText = "✅ เชื่อมต่อเรียบร้อยแล้ว";
+    document.getElementById("status").innerText = "✅ เชื่อมต่อสำเร็จ";
     client.subscribe("home/light/yourname123");
 });
 
 // =====================
-// RECEIVE
+// RECEIVE DATA
 // =====================
 client.on("message", (topic, message) => {
 
@@ -120,7 +175,7 @@ client.on("message", (topic, message) => {
 });
 
 // =====================
-// UPDATE UI
+// UPDATE LIGHT UI
 // =====================
 function updateUI(id, state){
     document.getElementById(id).src =
@@ -139,23 +194,27 @@ function checkChange(name, value){
 
     if(lastState[name] !== value){
 
-        let status = value == 1 ? "ถูกเปิดใช้งาน" : "ปิดการใช้งานแล้ว";
+        let status = value == 1 ? "เปิดใช้งาน" : "ปิดใช้งาน";
         let timeISO = new Date().toISOString();
 
-        // ✅ ใช้ ISO ตรง ๆ (สำคัญมาก)
+        let hour = new Date(timeISO).getHours();
+        hourCount[hour]++;
+
         addLog(name, status, timeISO);
         saveToSupabase(name, status, timeISO);
+
+        updateChart();
 
         lastState[name] = value;
     }
 }
 
 // =====================
-// FORMAT TIME (FIXED)
+// FORMAT TIME
 // =====================
 function formatTime(iso){
 
-    const d = new Date(iso); // ✔ browser จัด timezone ให้แล้ว
+    const d = new Date(iso);
 
     const year = d.getFullYear() + 543;
     const month = String(d.getMonth()+1).padStart(2,'0');
@@ -167,29 +226,64 @@ function formatTime(iso){
 }
 
 // =====================
-// ADD TABLE (FORMAT ตรงนี้เท่านั้น)
+// TABLE LOG
 // =====================
 function addLog(light, status, isoTime){
 
     let row = document.getElementById("logTable").insertRow(1);
 
-    row.insertCell(0).innerText = light;
+    row.insertCell(0).innerText = deviceName[light]; // ✅ ภาษาไทย
     row.insertCell(1).innerText = status;
     row.insertCell(2).innerText = formatTime(isoTime);
 }
 
 // =====================
-// SAVE TO SUPABASE
+// SAVE SUPABASE
 // =====================
 async function saveToSupabase(light, status, time){
 
-    const { error } = await supabaseClient
+    await supabaseClient
         .from("light_logs")
-        .insert([{ light, status, time }]);
+        .insert([{
+            light: deviceName[light],
+            status,
+            time
+        }]);
+}
 
-    if(error){
-        console.log("Supabase error:", error);
+// =====================
+// CHART
+// =====================
+function updateChart(){
+
+    const ctx = document.getElementById('usageChart');
+
+    if(chart){
+        chart.data.datasets[0].data = hourCount;
+        chart.update();
+        return;
     }
+
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Array.from({length:24}, (_,i)=> i+":00"),
+            datasets: [{
+                label: "จำนวนการใช้งาน",
+                data: hourCount,
+                backgroundColor: "rgba(54, 162, 235, 0.6)"
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision:0 }
+                }
+            }
+        }
+    });
 }
 
 // =====================
@@ -201,12 +295,22 @@ async function loadHistory(){
         .from("light_logs")
         .select("*")
         .order("time", { ascending: false })
-        .limit(20);
+        .limit(200);
 
     if(data){
         data.forEach(row => {
-            addLog(row.light, row.status, row.time); // ✅ ส่ง ISO ตรง
+
+            addLog(row.light, row.status, row.time);
+
+            let d = new Date(row.time);
+            let hour = d.getHours();
+
+            if(row.status.includes("เปิด")){
+                hourCount[hour]++;
+            }
         });
+
+        updateChart();
     }
 }
 
