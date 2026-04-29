@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Smart Home Dashboard</title>
+<title>Smart Home AI Dashboard</title>
 
 <!-- MQTT -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -21,11 +21,9 @@ body {
     text-align:center;
 }
 
-h2 {
-    color:white;
-}
+h2 { color:white; }
 
-.container {
+.container{
     display:flex;
     justify-content:center;
     gap:20px;
@@ -34,47 +32,46 @@ h2 {
 }
 
 /* HOUSE */
-.house {
-    position: relative;
-    width: 800px;
+.house{
+    position:relative;
+    width:800px;
     margin:auto;
 }
 
-.house img.bg {
-    width: 100%;
+.house img.bg{ width:100%; }
+
+.light{
+    position:absolute;
+    width:60px;
 }
 
-.light {
-    position: absolute;
-    width: 60px;
-}
-
-#l1 { top: 100px; left: 120px; }
-#l2 { top: 100px; left: 500px; }
-#l3 { top: 300px; left: 150px; }
-#l4 { top: 300px; left: 520px; }
+#l1{ top:100px; left:120px; }
+#l2{ top:100px; left:500px; }
+#l3{ top:300px; left:150px; }
+#l4{ top:300px; left:520px; }
 
 /* TABLE */
-table {
+table{
     color:white;
-    border-collapse: collapse;
+    border-collapse:collapse;
     width:420px;
 }
 
-td, th {
+td,th{
     border:1px solid white;
     padding:6px;
     font-size:12px;
 }
 
-/* RIGHT PANEL */
-.panel {
+/* PANEL */
+.panel{
     background:white;
     padding:15px;
     border-radius:10px;
+    width:420px;
 }
 
-#status {
+#status{
     color:white;
 }
 </style>
@@ -82,7 +79,7 @@ td, th {
 
 <body>
 
-<h2>🏠 Smart Home Dashboard</h2>
+<h2>🏠 Smart Home AI Dashboard</h2>
 
 <div class="house">
     <img src="BG.png" class="bg">
@@ -97,10 +94,9 @@ td, th {
 
 <div class="container">
 
-    <!-- LEFT: TABLE -->
+    <!-- LEFT TABLE -->
     <div>
         <h3 style="color:white;">📊 ประวัติการใช้งาน</h3>
-
         <table id="logTable">
             <tr>
                 <th>อุปกรณ์</th>
@@ -110,10 +106,17 @@ td, th {
         </table>
     </div>
 
-    <!-- RIGHT: CHART -->
-    <div class="panel">
-        <h3>📈 วิเคราะห์การใช้งาน 24 ชั่วโมง</h3>
-        <canvas id="usageChart" width="400" height="300"></canvas>
+    <!-- RIGHT PANEL -->
+    <div>
+        <div class="panel">
+            <h3>📈 วิเคราะห์ 24 ชั่วโมง</h3>
+            <canvas id="usageChart" width="400" height="300"></canvas>
+        </div>
+
+        <div class="panel" style="margin-top:10px;">
+            <h3>🧠 AI วิเคราะห์พฤติกรรม</h3>
+            <div id="aiReport"></div>
+        </div>
     </div>
 
 </div>
@@ -121,7 +124,7 @@ td, th {
 <script>
 
 // =====================
-// DEVICE NAME (THAI)
+// DEVICE NAME
 // =====================
 const deviceName = {
     l1: "หลอดไฟห้องน้ำ",
@@ -147,7 +150,8 @@ const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
 
 let lastState = { l1:null, l2:null, l3:null, l4:null };
 
-// 24-hour analysis
+// AI DATA
+let events = [];
 let hourCount = Array(24).fill(0);
 let chart;
 
@@ -155,7 +159,7 @@ let chart;
 // CONNECT
 // =====================
 client.on("connect", () => {
-    document.getElementById("status").innerText = "✅ เชื่อมต่อสำเร็จ";
+    document.getElementById("status").innerText = "✅ Connected";
     client.subscribe("home/light/yourname123");
 });
 
@@ -175,11 +179,27 @@ client.on("message", (topic, message) => {
 });
 
 // =====================
-// UPDATE LIGHT UI
+// UI UPDATE
 // =====================
 function updateUI(id, state){
     document.getElementById(id).src =
-        (state == 1) ? "light_on.png" : "light_off.png";
+        state == 1 ? "light_on.png" : "light_off.png";
+}
+
+// =====================
+// FORMAT TIME
+// =====================
+function formatTime(iso){
+
+    const d = new Date(iso);
+
+    return `${String(d.getDate()).padStart(2,'0')}/${
+        String(d.getMonth()+1).padStart(2,'0')
+    }/${d.getFullYear()+543} ${
+        String(d.getHours()).padStart(2,'0')
+    }:${
+        String(d.getMinutes()).padStart(2,'0')
+    }`;
 }
 
 // =====================
@@ -195,34 +215,27 @@ function checkChange(name, value){
     if(lastState[name] !== value){
 
         let status = value == 1 ? "เปิดใช้งาน" : "ปิดใช้งาน";
-        let timeISO = new Date().toISOString();
+        let time = new Date();
 
-        let hour = new Date(timeISO).getHours();
-        hourCount[hour]++;
+        // STORE EVENT (AI)
+        events.push({
+            device: name,
+            state: value,
+            time: time
+        });
 
-        addLog(name, status, timeISO);
-        saveToSupabase(name, status, timeISO);
+        // HOURLY ANALYSIS
+        let hour = time.getHours();
+        if(value == 1) hourCount[hour]++;
+
+        addLog(name, status, time.toISOString());
+        saveToSupabase(name, status, time.toISOString());
 
         updateChart();
+        runAIAnalysis();
 
         lastState[name] = value;
     }
-}
-
-// =====================
-// FORMAT TIME
-// =====================
-function formatTime(iso){
-
-    const d = new Date(iso);
-
-    const year = d.getFullYear() + 543;
-    const month = String(d.getMonth()+1).padStart(2,'0');
-    const day = String(d.getDate()).padStart(2,'0');
-    const hour = String(d.getHours()).padStart(2,'0');
-    const minute = String(d.getMinutes()).padStart(2,'0');
-
-    return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 // =====================
@@ -232,13 +245,13 @@ function addLog(light, status, isoTime){
 
     let row = document.getElementById("logTable").insertRow(1);
 
-    row.insertCell(0).innerText = deviceName[light]; // ✅ ภาษาไทย
+    row.insertCell(0).innerText = deviceName[light];
     row.insertCell(1).innerText = status;
     row.insertCell(2).innerText = formatTime(isoTime);
 }
 
 // =====================
-// SAVE SUPABASE
+// SUPABASE
 // =====================
 async function saveToSupabase(light, status, time){
 
@@ -256,7 +269,7 @@ async function saveToSupabase(light, status, time){
 // =====================
 function updateChart(){
 
-    const ctx = document.getElementById('usageChart');
+    const ctx = document.getElementById("usageChart");
 
     if(chart){
         chart.data.datasets[0].data = hourCount;
@@ -264,26 +277,80 @@ function updateChart(){
         return;
     }
 
-    chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: Array.from({length:24}, (_,i)=> i+":00"),
-            datasets: [{
-                label: "จำนวนการใช้งาน",
-                data: hourCount,
-                backgroundColor: "rgba(54, 162, 235, 0.6)"
+    chart = new Chart(ctx,{
+        type:"bar",
+        data:{
+            labels:[...Array(24)].map((_,i)=>i+":00"),
+            datasets:[{
+                label:"การใช้งาน",
+                data:hourCount,
+                backgroundColor:"rgba(54,162,235,0.6)"
             }]
         },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { precision:0 }
-                }
+        options:{
+            scales:{
+                y:{ beginAtZero:true, ticks:{precision:0} }
             }
         }
     });
+}
+
+// =====================
+// AI ANALYSIS ENGINE
+// =====================
+function runAIAnalysis(){
+
+    if(events.length === 0) return;
+
+    let hourMap = Array(24).fill(0);
+
+    events.forEach(e=>{
+        if(e.state == 1){
+            hourMap[e.time.getHours()]++;
+        }
+    });
+
+    let peakHour = hourMap.indexOf(Math.max(...hourMap));
+
+    let count = {};
+    events.forEach(e=>{
+        count[e.device] = (count[e.device]||0)+1;
+    });
+
+    let mostUsed = Object.keys(count).reduce((a,b)=>
+        count[a]>count[b]?a:b
+    );
+
+    let duration = {};
+    let lastOn = {};
+
+    events.forEach(e=>{
+        if(e.state==1){
+            lastOn[e.device]=e.time;
+        }else{
+            if(lastOn[e.device]){
+                let diff=(e.time-lastOn[e.device])/60000;
+                duration[e.device]=duration[e.device]||[];
+                duration[e.device].push(diff);
+                lastOn[e.device]=null;
+            }
+        }
+    });
+
+    let avgText="";
+
+    for(let d in duration){
+        let avg=duration[d].reduce((a,b)=>a+b,0)/duration[d].length;
+        avgText+=`<p>🔌 ${deviceName[d]} ≈ ${avg.toFixed(1)} นาที</p>`;
+    }
+
+    document.getElementById("aiReport").innerHTML=`
+        <p>⏰ Peak Time: <b>${peakHour}:00</b></p>
+        <p>📌 ใช้งานมากสุด: <b>${deviceName[mostUsed]}</b></p>
+        ${avgText}
+        <hr>
+        <small>AI วิเคราะห์จากพฤติกรรมการใช้งานจริง</small>
+    `;
 }
 
 // =====================
@@ -294,23 +361,24 @@ async function loadHistory(){
     const { data } = await supabaseClient
         .from("light_logs")
         .select("*")
-        .order("time", { ascending: false })
+        .order("time",{ascending:false})
         .limit(200);
 
     if(data){
-        data.forEach(row => {
 
-            addLog(row.light, row.status, row.time);
+        data.forEach(row=>{
 
-            let d = new Date(row.time);
-            let hour = d.getHours();
+            addLog(row.light,row.status,row.time);
 
+            let d=new Date(row.time);
             if(row.status.includes("เปิด")){
-                hourCount[hour]++;
+                hourCount[d.getHours()]++;
             }
+
         });
 
         updateChart();
+        runAIAnalysis();
     }
 }
 
